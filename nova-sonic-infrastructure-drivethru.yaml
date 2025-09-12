@@ -199,7 +199,6 @@ Resources:
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/GET/loyalty'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/OPTIONS/loyalty'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/POST/cart'
-              - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/DELETE/cart'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/OPTIONS/cart'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/POST/order'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AppApi}/${Environment}/OPTIONS/order'
@@ -751,7 +750,6 @@ Resources:
               - dynamodb:GetItem
               - dynamodb:PutItem
               - dynamodb:UpdateItem
-              - dynamodb:DeleteItem
               - dynamodb:Query
               - dynamodb:Scan
               - dynamodb:BatchGetItem
@@ -1070,60 +1068,13 @@ Resources:
             ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: "'*'"
               method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'GET,POST,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
             ResponseTemplates:
               application/json: |
                 {
                   "success": true,
                   "cartItemId": "$context.requestId",
                   "message": "Item added to cart successfully"
-                }
-
-  CartDeleteMethod:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      RestApiId: !Ref AppApi
-      ResourceId: !Ref CartResource
-      HttpMethod: DELETE
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref ApiGatewayAuthorizer
-      RequestParameters:
-        method.request.querystring.deviceId: true
-      MethodResponses:
-        - StatusCode: 200
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Origin: true
-            method.response.header.Access-Control-Allow-Headers: true
-            method.response.header.Access-Control-Allow-Methods: true
-        - StatusCode: 401
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Origin: true
-      Integration:
-        Type: AWS
-        IntegrationHttpMethod: POST
-        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:dynamodb:action/DeleteItem'
-        Credentials: !GetAtt ApiGatewayDynamoDBRole.Arn
-        RequestParameters:
-          integration.request.querystring.deviceId: method.request.querystring.deviceId
-        RequestTemplates:
-          application/json: !Sub |
-            {
-              "TableName": "${CartTable}",
-              "Key": {
-                "deviceId": {"S": "$input.params('deviceId')"}
-              }
-            }
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              method.response.header.Access-Control-Allow-Origin: "'*'"
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'GET,POST,DELETE,OPTIONS'"
-            ResponseTemplates:
-              application/json: |
-                {
-                  "success": true,
-                  "message": "Cart item deleted successfully"
                 }
 
   CartOptionsMethod:
@@ -1148,7 +1099,7 @@ Resources:
             ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: "'*'"
               method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'GET,POST,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
 
   # Order API Resources
   OrderResource:
@@ -1329,7 +1280,6 @@ Resources:
       - LoyaltyGetMethod
       - LoyaltyOptionsMethod
       - CartPostMethod
-      - CartDeleteMethod
       - CartOptionsMethod
       - OrderPostMethod
       - OrderOptionsMethod
