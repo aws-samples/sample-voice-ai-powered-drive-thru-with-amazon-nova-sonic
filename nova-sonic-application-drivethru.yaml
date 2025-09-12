@@ -14,14 +14,29 @@ Resources:
   LambdaDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub '${AWS::StackName}-lambda-dlq'
+      QueueName: !Sub ${AWS::StackName}-lambda-dlq
       MessageRetentionPeriod: 1209600
       KmsMasterKeyId: alias/aws/sqs
+
+  LambdaDeadLetterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref LambdaDeadLetterQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: "sqs:*"
+            Resource: !GetAtt LambdaDeadLetterQueue.Arn
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
 
   DriveThruMenuLambda:
     Type: AWS::Lambda::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.12
       Handler: index.lambda_handler
       Role:
         Fn::ImportValue: !Sub "${InfrastructureStackName}-LambdaRole"
@@ -54,7 +69,8 @@ Resources:
                   "f": "fries",
                   "d": "drinks",
                   "s": "sauces",
-                  "c": "combos"
+                  "c": "combos",
+                  "t": "desserts"
               },
               "imagePrompts": {
                   "b1": {"name": "Classic Burger", "description": "A juicy beef patty with fresh lettuce, tomato, onion, and pickles on a toasted sesame seed bun", "prompt": "A delicious classic hamburger with lettuce, tomato, onion, and pickles on a sesame seed bun, centered in frame, professional food photography with centered composition"},
@@ -74,6 +90,9 @@ Resources:
                   "s1": {"name": "Ranch", "description": "Creamy ranch dressing made with herbs and spices, perfect for dipping", "prompt": "A single small round container of creamy white ranch dressing viewed from the side, positioned exactly in the center, professional food photography"},
                   "s2": {"name": "BBQ Sauce", "description": "Our signature tangy BBQ sauce with a perfect balance of sweet and smoky flavors", "prompt": "A single small round container of dark BBQ sauce viewed from the side, positioned exactly in the center, professional food photography"},
                   "s3": {"name": "Honey Mustard", "description": "Sweet honey mustard sauce that's perfect for chicken wings and fries", "prompt": "A single small round container of golden honey mustard sauce viewed from the side, positioned exactly in the center, professional food photography"},
+                  "t1": {"name": "Apple Pie Slice", "description": "Individual slice of classic apple pie with flaky crust and cinnamon-spiced apple filling", "prompt": "A single serving slice of apple pie in a white takeout box, golden flaky crust with cinnamon-spiced apple filling visible, quick service restaurant presentation, professional food photography with centered composition"},
+                  "t2": {"name": "Chocolate Pie Slice", "description": "Individual slice of rich chocolate cream pie with smooth filling and graham cracker crust", "prompt": "A single serving slice of chocolate cream pie in a white takeout box, rich dark chocolate filling with graham cracker crust visible, quick service restaurant presentation, professional food photography with centered composition"},
+                  "t3": {"name": "Vanilla Ice Cream Cone", "description": "Premium vanilla soft-serve ice cream in a crispy waffle cone", "prompt": "A vanilla soft-serve ice cream cone in a golden waffle cone, perfectly swirled creamy white ice cream, quick service restaurant style, professional food photography with centered composition"},
                   "c1": {"name": "Burger Combo", "description": "Complete meal featuring our classic burger, crispy fries, and your choice of drink", "prompt": "A complete meal combo with burger, fries, and drink arranged together on a tray, centered in frame, classic fast food combo meal"},
                   "c2": {"name": "Wings Combo", "description": "Six buffalo wings served with fries and a refreshing drink for the perfect meal", "prompt": "A wings combo meal with buffalo wings, fries, and soda arranged together, centered in frame, complete chicken wings meal"},
                   "c3": {"name": "Family Meal Combo", "description": "Perfect for sharing - includes multiple burgers, wings, fries, and drinks for the whole family", "prompt": "A large family meal combo with multiple burgers, wings, fries, and drinks arranged on a large tray, centered in frame, family-sized portion"}
@@ -98,7 +117,10 @@ Resources:
                   {"id": "s3", "name": "Honey Mustard", "price": 0.5, "category": ["sauces", "All Items"], "isCombo": False, "availableCustomizations": "[]", "items": "[]"},
                   {"id": "c1", "name": "Burger Combo", "price": 9.99, "category": ["combos", "All Items"], "isCombo": True, "availableCustomizations": "[]", "items": "[{\"id\":\"cb1\",\"name\":\"Classic Burger\",\"price\":5.99,\"category\":\"burgers\",\"isCombo\":false,\"availableCustomizations\":[{\"id\":\"add-cheese\",\"name\":\"Cheese\",\"price\":0.99,\"isRemoval\":false},{\"id\":\"remove-onion\",\"name\":\"No Onion\",\"price\":0,\"isRemoval\":true}]},{\"id\":\"cf1\",\"name\":\"Regular Fries\",\"price\":2.99,\"category\":\"fries\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cd1\",\"name\":\"Cola\",\"price\":1.99,\"category\":\"drinks\",\"isCombo\":false,\"availableCustomizations\":[{\"id\":\"remove-ice\",\"name\":\"No Ice\",\"price\":0,\"isRemoval\":true}]}]"},
                   {"id": "c2", "name": "Wings Combo", "price": 11.99, "category": ["combos", "All Items"], "isCombo": True, "availableCustomizations": "[]", "items": "[{\"id\":\"cw1\",\"name\":\"Buffalo Wings (6 pieces)\",\"price\":7.99,\"category\":\"wings\",\"isCombo\":false,\"availableCustomizations\":[{\"id\":\"extra-sauce\",\"name\":\"Extra Sauce\",\"price\":0.79,\"isRemoval\":false}]},{\"id\":\"cf2\",\"name\":\"Regular Fries\",\"price\":2.99,\"category\":\"fries\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cd2\",\"name\":\"Cola\",\"price\":1.99,\"category\":\"drinks\",\"isCombo\":false,\"availableCustomizations\":[]}]"},
-                  {"id": "c3", "name": "Family Meal Combo", "price": 24.99, "category": ["combos", "All Items"], "isCombo": True, "availableCustomizations": "[]", "items": "[{\"id\":\"cfb1\",\"name\":\"Classic Burger (2)\",\"price\":11.98,\"category\":\"burgers\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cfw1\",\"name\":\"Buffalo Wings (6 pieces)\",\"price\":7.99,\"category\":\"wings\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cff1\",\"name\":\"Regular Fries (2)\",\"price\":5.98,\"category\":\"fries\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cfd1\",\"name\":\"Cola (2)\",\"price\":3.98,\"category\":\"drinks\",\"isCombo\":false,\"availableCustomizations\":[]}]"}
+                  {"id": "c3", "name": "Family Meal Combo", "price": 24.99, "category": ["combos", "All Items"], "isCombo": True, "availableCustomizations": "[]", "items": "[{\"id\":\"cfb1\",\"name\":\"Classic Burger (2)\",\"price\":11.98,\"category\":\"burgers\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cfw1\",\"name\":\"Buffalo Wings (6 pieces)\",\"price\":7.99,\"category\":\"wings\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cff1\",\"name\":\"Regular Fries (2)\",\"price\":5.98,\"category\":\"fries\",\"isCombo\":false,\"availableCustomizations\":[]},{\"id\":\"cfd1\",\"name\":\"Cola (2)\",\"price\":3.98,\"category\":\"drinks\",\"isCombo\":false,\"availableCustomizations\":[]}]"},
+                  {"id": "t1", "name": "Apple Pie Slice", "price": 3.99, "category": ["desserts", "All Items"], "isCombo": False, "availableCustomizations": "[]", "items": "[]"},
+                  {"id": "t2", "name": "Chocolate Pie Slice", "price": 4.49, "category": ["desserts", "All Items"], "isCombo": False, "availableCustomizations": "[]", "items": "[]"},
+                  {"id": "t3", "name": "Vanilla Ice Cream Cone", "price": 2.99, "category": ["desserts", "All Items"], "isCombo": False, "availableCustomizations": "[]", "items": "[]"}
               ]
           }
           
