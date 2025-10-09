@@ -1,3 +1,6 @@
+> [!NOTE]
+> The content presented here serves as an example intended solely for educational objectives and should not be implemented in a live production environment without proper modifications and rigorous testing.
+
 # Voice AI-Powered Drive-Thru with Amazon Nova Sonic
 
 [Artificial Intelligence](https://aws.amazon.com/ai/) (AI) is transforming the quick-service restaurant industry, particularly in drive-thru operations where efficiency and customer satisfaction intersect. Traditional systems create significant obstacles in service delivery, from staffing limitations and order accuracy issues to inconsistent customer experiences across locations. These challenges, combined with rising labor costs and demand fluctuations, have pushed the industry to seek innovative solutions.
