@@ -1,5 +1,5 @@
 > [!NOTE]
-> The content presented here serves as an example intended solely for educational objectives and should not be implemented in a live production environment without proper modifications and rigorous testing.
+> The content presented here serves as an example intended solely for educational objectives and should not be implemented in a live production environment without proper modifications and rigorous testing. 
 
 # Voice AI-Powered Drive-Thru with Amazon Nova Sonic
 
