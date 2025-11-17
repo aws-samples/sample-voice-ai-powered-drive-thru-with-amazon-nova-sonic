@@ -242,4 +242,11 @@ To learn more about Amazon Nova Sonic and additional solutions, refer to the fol
 - Frontend application source code used in this blog is available on [GitHub](https://github.com/aws-samples/sample-voice-ai-powered-contextual-menu-board-with-amazon-nova-sonic)
 - [Voice AI-Powered Hotel In-Room Service with Amazon Nova Sonic](https://github.com/aws-samples/sample-voice-ai-powered-in-room-service-with-amazon-nova-sonic/tree/main)
 
+## Authors
+
+Ravi Kumar, Sr TAM
+Sergio Barraza, Sr TAM
+Salman Ahmed, Sr TAM
+Ankush Goyal, ESL TAM
+
 ---
