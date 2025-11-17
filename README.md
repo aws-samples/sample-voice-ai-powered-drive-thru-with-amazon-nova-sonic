@@ -244,9 +244,9 @@ To learn more about Amazon Nova Sonic and additional solutions, refer to the fol
 
 ## Authors
 
-Ravi Kumar, Senior TAM
-Sergio Barraza, Senior TAM
-Salman Ahmed, Senior TAM
-Ankush Goyal, ESL TAM
+- Ravi Kumar, Senior TAM
+- Sergio Barraza, Senior TAM
+- Salman Ahmed, Senior TAM
+- Ankush Goyal, ESL TAM
 
 ---
