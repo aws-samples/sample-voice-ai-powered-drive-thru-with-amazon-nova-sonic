@@ -51,7 +51,8 @@ Resources:
             Fn::ImportValue: !Sub "${InfrastructureStackName}-MenuImagesBucket"
           CLOUDFRONT_DOMAIN:
             Fn::ImportValue: !Sub "${InfrastructureStackName}-CloudFrontDomain"
-          NOVA_MODEL_ID: 'amazon.nova-canvas-v1:0'
+          NOVA_MODEL_ID: 'stability.stable-image-core-v1:1'
+          BEDROCK_REGION: 'us-west-2'
       KmsKeyArn:
         Fn::ImportValue: !Sub "${InfrastructureStackName}-KMSKeyArn"
       Code:
@@ -131,7 +132,7 @@ Resources:
                       
                       dynamodb = boto3.client('dynamodb')
                       s3 = boto3.client('s3')
-                      bedrock = boto3.client('bedrock-runtime')
+                      bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('BEDROCK_REGION', 'us-west-2'))
                       
                       menu_table_name = event['ResourceProperties']['MenuTableName']
                       bucket_name = os.environ['BUCKET_NAME']
@@ -179,21 +180,14 @@ Resources:
           def generate_ai_image(bedrock_client, prompt, item_id, nova_model_id):
               try:
                   print(f"Generating AI image for {item_id}")
-                  seed_value = hash(item_id) % 1000
+                  seed_value = hash(item_id) % 4294967295
                   
                   request_body = {
-                      "taskType": "TEXT_IMAGE",
-                      "textToImageParams": {
-                          "text": prompt + ", professional food photography",
-                          "negativeText": "messy, unprofessional, poor lighting"
-                      },
-                      "imageGenerationConfig": {
-                          "numberOfImages": 1,
-                          "height": 352,
-                          "width": 1024,
-                          "cfgScale": 7.5,
-                          "seed": seed_value
-                      }
+                      "prompt": prompt + ", professional food photography",
+                      "negative_prompt": "messy, unprofessional, poor lighting",
+                      "aspect_ratio": "16:9",
+                      "seed": seed_value,
+                      "output_format": "jpeg"
                   }
                   
                   response = bedrock_client.invoke_model(
