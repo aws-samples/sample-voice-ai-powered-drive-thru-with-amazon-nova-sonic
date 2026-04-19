@@ -209,8 +209,7 @@ Resources:
               - bedrock:InvokeModel
               - bedrock:InvokeModelWithResponseStream
             Resource: 
-              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-sonic-v1:0'
-              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-canvas-v1:0'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-sonic-v1:0'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/stability.stable-image-core-v1:1'
 
   # ========================================
@@ -713,7 +712,6 @@ Resources:
               - bedrock:InvokeModel
               - bedrock:InvokeModelWithResponseStream
             Resource: 
-              - 'arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0'
               - 'arn:aws:bedrock:*::foundation-model/stability.stable-image-core-v1:1'
 
   LambdaKMSPolicy:

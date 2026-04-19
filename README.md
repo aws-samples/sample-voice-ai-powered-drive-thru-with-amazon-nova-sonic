@@ -1,252 +1,325 @@
-> [!NOTE]
-> The content presented here serves as an example intended solely for educational objectives and should not be implemented in a live production environment without proper modifications and rigorous testing. 
+# Guidance for Drive Thru Voice AI using Amazon Bedrock
 
-# Voice AI-Powered Drive-Thru with Amazon Nova Sonic
+> **Note:** If you are following the step-by-step walkthrough from the [AWS Blog Post](https://aws.amazon.com/blogs/machine-learning/voice-ai-powered-drive-thru-ordering-with-amazon-nova-sonic-and-dynamic-menu-displays/), the blog guides you through deploying each CloudFormation template individually via the console. This README provides both an automated deployment script and equivalent manual steps for Guidance submission. The underlying infrastructure and application are the same.
 
-[Artificial Intelligence](https://aws.amazon.com/ai/) (AI) is transforming the quick-service restaurant industry, particularly in drive-thru operations where efficiency and customer satisfaction intersect. Traditional systems create significant obstacles in service delivery, from staffing limitations and order accuracy issues to inconsistent customer experiences across locations. These challenges, combined with rising labor costs and demand fluctuations, have pushed the industry to seek innovative solutions.
+## Table of Contents
 
-In this post, we'll demonstrate how to implement a Quick Service Restaurants (QSRs) drive-thru solution using [Amazon Nova Sonic](https://aws.amazon.com/ai/generative-ai/nova/speech/) and AWS services. We'll walk through building an intelligent system that combines voice AI with interactive menu displays, providing technical insights and implementation guidance to help restaurants modernize their drive-thru operations.
+1. [Overview](#overview)
+    - [Cost](#cost)
+2. [Prerequisites](#prerequisites)
+    - [Operating System](#operating-system)
+    - [AWS Account Requirements](#aws-account-requirements)
+    - [Supported Regions](#supported-regions)
+3. [Automated Deployment](#automated-deployment)
+4. [Manual Deployment](#manual-deployment)
+5. [Deployment Validation](#deployment-validation)
+6. [Running the Guidance](#running-the-guidance)
+7. [Next Steps](#next-steps)
+8. [Cleanup](#cleanup)
+9. [FAQ, Known Issues, Additional Considerations, and Limitations](#faq-known-issues-additional-considerations-and-limitations)
+10. [Notices](#notices)
+11. [Authors](#authors)
 
-For QSRs, the stakes are particularly high during peak hours, when long wait times and miscommunication between customers and staff can significantly impact business performance. Common pain points include order accuracy issues, service quality variations across different shifts, and limited ability to handle sudden spikes in customer demand. Modern consumers expect the same seamless, efficient service they experience with digital ordering systems, creating an unprecedented opportunity for voice AI technology to support 24/7 availability and consistent service quality.
+## Overview
 
-Amazon Nova Sonic is a [foundation model (FM)](https://aws.amazon.com/what-is/foundation-models/) within the [Amazon Nova](https://aws.amazon.com/ai/generative-ai/nova/) family, designed specifically for voice-enabled applications. Available through [Amazon Bedrock](https://aws.amazon.com/bedrock/), developers can use Nova Sonic to create applications that understand spoken language, process complex conversational interactions, and generate appropriate responses for real-time customer engagement. This innovative speech-to-speech model addresses traditional voice application challenges through:
+This Guidance demonstrates how to build an intelligent drive-thru ordering system for quick-service restaurants (QSRs) using **Amazon Nova 2 Sonic** and AWS serverless services. The system combines real-time voice AI with an interactive digital menu board to deliver natural, human-like ordering experiences that address common operational challenges including staffing constraints, order accuracy issues, and peak-hour bottlenecks.
 
-- Accurately recognizes streaming speech across accents with robustness to background noise
-- Adapts speech response to user's tone and sentiment
-- Bidirectional streaming speech I/O with low user perceived latency
-- Graceful interruption handling and natural turn-taking in conversations
-- Industry-leading price-performance
+**Amazon Nova 2 Sonic** is a foundation model (FM) within the **Amazon Nova** family, available through **Amazon Bedrock**. It processes streaming speech with robustness to background noise, adapts responses to user tone and sentiment, and supports bidirectional streaming with low perceived latency. The system establishes direct WebSocket connections from the browser to Nova 2 Sonic using the AWS SDK (`client-bedrock-runtime` v3.842.0), eliminating the need for a backend relay server.
 
-When integrated with AWS serverless services, Nova Sonic delivers natural, human-like voice interactions that helps improve the drive-thru experience. The architecture creates a cost-effective system that enhances both service consistency and operational efficiency through intelligent automation.
+The architecture integrates the following AWS services:
 
-## Solution overview
+- **Amazon Cognito** — User authentication with role-based access control
+- **AWS Amplify** — Hosts the React-based digital menu board frontend
+- **Amazon API Gateway** — REST API with Cognito authorization and direct **Amazon DynamoDB** integration
+- **Amazon DynamoDB** — Stores menu items, loyalty data, cart sessions, orders, and chat history across five tables
+- **AWS Lambda** — Populates menu data and generates AI images using **Stability AI Stable Image Core** model via Amazon Bedrock
+- **Amazon Simple Storage Service (Amazon S3)** — Stores AI-generated menu item images
+- **Amazon CloudFront** — Global content delivery for menu images with **AWS WAF** protection
+- **AWS Key Management Service (AWS KMS)** — Encrypts DynamoDB tables and Lambda environment variables
+- **Amazon Simple Queue Service (Amazon SQS)** — Dead letter queue for Lambda error handling
+- **AWS Identity and Access Management (IAM)** — Least-privilege roles for all service interactions
 
-Our voice AI drive-thru solution creates an intelligent ordering system that combines real-time voice interaction with a robust backend infrastructure, delivering a natural customer experience. The system processes speech in real-time, understanding various accents, speaking styles, and handling background noise common in drive-thru environments. Integrating voice commands with interactive menu displays enhances user feedback while streamlining the ordering process by reducing verbal interactions.
+The following architecture diagram illustrates how these services interconnect to enable natural conversations between customers and the digital menu board, orchestrating the entire customer journey from drive-thru entry to order completion.
 
-The system is built on AWS serverless architecture, integrating key components including [Amazon Cognito](https://aws.amazon.com/cognito/) for authentication with [role-based access control](https://docs.aws.amazon.com/cognito/latest/developerguide/role-based-access-control.html), [AWS Amplify](https://aws.amazon.com/amplify/) for the digital menu board, [Amazon API Gateway](https://aws.amazon.com/api-gateway/) to facilitate access to [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) tables, [AWS Lambda](https://aws.amazon.com/lambda/) functions with [Amazon Nova Canvas](https://aws.amazon.com/ai/generative-ai/nova/creative/) for menu image generation, and [Amazon Simple Storage Service](https://aws.amazon.com/s3/) (Amazon S3) with [Amazon CloudFront](https://aws.amazon.com/cloudfront/) for image storage and delivery.
+![Architecture Diagram](assets/images/architecture-diagram.png)
 
-The following architecture diagram illustrates how these services interconnect to for natural conversations between customers and the digital menu board, orchestrating the entire customer journey from drive-thru entry to order completion.
+1. The customer approaches the drive-thru and the digital menu board loads via **AWS Amplify**, authenticating through **Amazon Cognito**.
+2. **Amazon Cognito** issues temporary AWS credentials mapped to an **IAM** role, granting access to **Amazon Bedrock** and **Amazon API Gateway** endpoints.
+3. The frontend establishes a direct WebSocket connection to **Amazon Nova 2 Sonic** through **Amazon Bedrock** for real-time speech-to-speech processing.
+4. Nova 2 Sonic processes the customer's voice input, recognizes intent, and calls tool functions (e.g., `getMenuItems`, `showCategory`) to retrieve menu data.
+5. **Amazon API Gateway** routes tool function requests to **Amazon DynamoDB** tables (Menu, Cart, Order, Loyalty, Chat) using direct service integration.
+6. **Amazon CloudFront** delivers AI-generated menu images from **Amazon S3**, protected by **AWS WAF** rules.
+7. Nova 2 Sonic generates a contextual audio response and triggers UI updates on the digital menu board to highlight relevant items.
+8. The ordering flow continues through cart management, order placement, and loyalty point tracking until the customer completes the transaction.
 
-<img width="1450" height="841" alt="1 NovaSonic-DriveThru-Architecture-Diagram" src="https://github.com/user-attachments/assets/248ec923-69ab-46cc-8186-370398c9c65f" />
+### Cost
 
-Let's examine how each component works together to power this intelligent ordering system.
+You are responsible for the cost of the AWS services used while running this Guidance. As of April 2026, the cost for running this Guidance with the default settings in the US East (N. Virginia) Region is approximately **$131.00 per month** for processing approximately 10,000 drive-thru orders.
+
+The following table provides a sample cost breakdown for deploying this Guidance with the default parameters in the US East (N. Virginia) Region for one month.
+
+| AWS Service | Dimensions | Cost [USD] |
+| --- | --- | --- |
+| Amazon Cognito | 1,000 active users per month (no advanced security) | $0.00 |
+| Amazon API Gateway | 50,000 REST API calls per month | $0.18 |
+| Amazon DynamoDB | 5 tables, on-demand capacity, 10 GB storage, 50,000 read/write units | $7.50 |
+| AWS Lambda | 10,000 invocations, 1024 MB memory, 30s avg duration (menu population) | $5.01 |
+| Amazon S3 | 1 GB storage, 50,000 GET requests | $0.03 |
+| Amazon CloudFront | 50 GB data transfer, 100,000 requests | $5.85 |
+| AWS WAF | 1 Web ACL, 3 rules, 100,000 requests | $7.00 |
+| Amazon Bedrock — Nova 2 Sonic | 10,000 voice sessions, ~30s avg (input + output audio) | $83.00 |
+| Amazon Bedrock — Image Generation | 25 images generated during initial deployment | $2.50 |
+| AWS KMS | 1 customer-managed key, 50,000 requests | $1.03 |
+| Amazon SQS | 1,000 messages (dead letter queue) | $0.00 |
+| AWS Amplify Hosting | 1 app, 15 GB served | $18.90 |
+| **Total estimated cost** | | **~$131.00/month** |
+
+We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance.
 
 ## Prerequisites
 
-You must have the following in place to complete the solution in this post:
+### Operating System
 
-- An [AWS account](https://signin.aws.amazon.com/signin?redirect_uri=https%3A%2F%2Fportal.aws.amazon.com%2Fbilling%2Fsignup%2Fresume&client_id=signup)
-- FM access in Amazon Bedrock for Amazon Nova Sonic and Amazon Nova Canvas in the same AWS Region where you will deploy this solution
-- The accompanying AWS CloudFormation templates downloaded from the [aws-samples GitHub repo](https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic)
+These deployment instructions are optimized to best work on **Amazon Linux 2023**. Deployment on macOS, Windows, or other Linux distributions may require additional steps.
 
-## Deploy solution resources using AWS CloudFormation
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) v2.x — configured with appropriate credentials
+- [AWS account](https://signin.aws.amazon.com/signin) with administrator access or sufficient permissions to create the resources listed in this Guidance
 
-Deploy the CloudFormation templates in an AWS Region where Amazon Bedrock is [available](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html) and has support for the following models: Amazon Nova Sonic and Amazon Nova Canvas.
+### AWS Account Requirements
 
-This solution consists of two CloudFormation templates that work together to create a complete restaurant drive-thru ordering system. The `nova-sonic-infrastructure-drivethru.yaml` template establishes the foundational AWS infrastructure including Cognito user authentication, S3 storage with CloudFront CDN for menu images, DynamoDB tables for menu items and customer data, and API Gateway endpoints with proper CORS configuration. The `nova-sonic-application-drivethru.yaml` template builds upon this foundation by deploying a Lambda function that populates the system with a complete embedded drive-thru menu featuring burgers, wings, fries, drinks, sauces, and combo meals, while using the Amazon Nova Canvas AI model to automatically generate professional food photography for each menu item and storing them in the S3 bucket for delivery through CloudFront.
+Before deploying this Guidance, verify the following:
 
-During the deployment of the first CloudFormation template `nova-sonic-infrastructure-drivethru.yaml`, you will need to specify the following parameters:
+1. **Amazon Bedrock model access** — Enable access to the following foundation models in the Amazon Bedrock console in the same Region where you deploy this Guidance:
+   - Amazon Nova 2 Sonic (`amazon.nova-2-sonic-v1:0`)
+   - Stability AI Stable Image Core (`stability.stable-image-core-v1:1`)
 
-- Stack name
-- Environment - Deployment environment: dev, staging, or prod (defaults to dev)
-- UserEmail - Valid email address for the user account (required)
+2. **Service quotas** — Verify your account has sufficient quotas for:
+   - AWS Lambda concurrent executions (default: 1,000)
+   - Amazon DynamoDB tables (default: 2,500)
+   - Amazon CloudFront distributions (default: 200)
 
-**Important:** You must enable access to the selected Amazon Nova Sonic model and Amazon Nova Canvas model in the Amazon Bedrock console before deployment.
+3. **AWS WAF** — The deployment creates a WAF Web ACL with `CLOUDFRONT` scope. This requires the CloudFormation stack to be deployed in `us-east-1` or in a Region that supports CloudFront-scoped WAF resources.
 
-AWS resource usage will incur costs. When deployment is complete, the following resources will be deployed:
+### Supported Regions
 
-- Amazon Cognito resources:
-  - [User pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools.html) – `CognitoUserPool`
-  - [App client](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-client-apps.html) – `AppClient`
-  - [Identity pool](https://docs.aws.amazon.com/cognito/latest/developerguide/identity-pools.html) – `CognitoIdentityPool`
-  - [Groups](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-user-groups.html) – `AppUserGroup`
-  - [User](https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users.html) – `AppUser`
+Deploy this Guidance in an AWS Region where Amazon Bedrock supports both Amazon Nova 2 Sonic and the Stability AI image generation model. As of April 2026, supported Regions include:
 
-- [AWS Identity and Access Management](https://aws.amazon.com/iam/) (IAM) resources:
-  - [IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html):
-    - `AuthenticatedRole`
-    - `DefaultAuthenticatedRole`
-    - `ApiGatewayDynamoDBRole`
-    - `LambdaExecutionRole`
-    - `S3BucketCleanupRole`
+- US East (N. Virginia) — `us-east-1`
+- US West (Oregon) — `us-west-2`
 
-- Amazon DynamoDB tables:
-  - `MenuTable` – Stores menu items, pricing, and customization options
-  - `LoyaltyTable` – Stores customer loyalty information and points
-  - `CartTable` – Stores shopping cart data for active sessions
-  - `OrderTable` – Stores completed and pending orders
-  - `ChatTable` – Stores completed chat details
+Verify current Region availability in the [Amazon Bedrock supported Regions documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html).
 
-- Amazon S3, CloudFront and AWS WAF resources:
-  - `MenuImagesBucket` – S3 bucket for storing menu item images
-  - `MenuImageCloudFrontDistribution` - CloudFront distribution for global content delivery
-  - `CloudFrontOriginAccessIdentity` – Secure access between CloudFront and S3
-  - `CloudFrontWebACL` – WAF protection for CloudFront distribution with security rules
+## Automated Deployment
 
-- Amazon API Gateway resources:
-  - REST API – `app-api` with Cognito authorization
-  - API resources and methods:
-    - `/menu` (GET, OPTIONS)
-    - `/loyalty` (GET, OPTIONS)
-    - `/cart` (POST, DELETE, OPTIONS)
-    - `/order` (POST, OPTIONS)
-    - `/chat` (POST, OPTIONS)
-  - API deployment to specified environment stage
+For automated deployment, a cross-platform deploy script (`scripts/deploy.sh`) is available. This script automates all deployment steps including resource creation, configuration, and validation.
 
-- AWS Lambda function:
-  - `S3BucketCleanupLambda` – Cleans up S3 bucket on stack deletion
+```bash
+# Clone the repository
+git clone https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic.git
+cd sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic
 
-- CloudFormation Custom Resource:
-  - `S3BucketCleanup` – Triggers `S3BucketCleanupLambda`
+# Make the script executable and run it
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+```
 
-After you deploy the CloudFormation template, copy the following from the Outputs tab on the AWS CloudFormation console to use during the configuration of your frontend application:
+**What the script does:**
+- Detects your operating system (macOS, Linux, Windows WSL)
+- Verifies AWS CLI is installed and credentials are configured
+- Prompts for your email address and preferred AWS Region
+- Uploads CloudFormation templates to S3 and deploys both stacks
+- Validates the deployment and displays stack outputs
+- Provides cleanup commands at the end
 
-- `cartApiUrl`
-- `loyaltyApiUrl`
-- `menuApiUrl`
-- `orderApiUrl`
-- `chatApiUrl`
-- `UserPoolClientId`
-- `UserPoolId`
-- `IdentityPoolId`
+**Environment:**
+- Designed for macOS, Linux, and Windows (WSL/Git Bash)
+- Requires AWS CLI v2.x configured with appropriate credentials
+- Amazon Bedrock model access must be enabled before running
 
-The following screenshot shows you what the **Outputs** tab will look like.
+**Note:** The deploy script automates the two CloudFormation stack deployments. After the script completes, deploy the Amplify frontend manually — see [Step 5 in Manual Deployment](#step-5-deploy-the-amplify-frontend). For a detailed understanding of each deployment step, see the [Manual Deployment](#manual-deployment) section below.
 
-![2 CFN-Output](https://github.com/user-attachments/assets/ef8fab56-8089-43ee-b261-5f3df19ebacb)
+## Manual Deployment
 
-These output values are essential for configuring your frontend application (deployed via AWS Amplify) to connect with the backend services. The API URLs will be used for making REST API calls, while the Cognito IDs will be used for user authentication and authorization.
+### Step 1: Clone the repository
 
-During the deployment of the second CloudFormation template `nova-sonic-application-drivethru.yaml` you will need to specify the following parameters:
+```bash
+git clone https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic.git
+cd sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic
+```
 
-- Stack name
-- InfrastructureStackName – This stack name matches the one you previously deployed using `nova-sonic-infrastructure-drivethru.yaml`
+### Step 2: Deploy the infrastructure stack
 
-When deployment is complete, the following resources will be deployed:
+1. Open the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/).
+2. Choose **Create stack** > **With new resources (standard)**.
+3. Under **Specify template**, choose **Upload a template file** and upload `nova-sonic-infrastructure-drivethru.yaml`.
+4. Choose **Next** and provide the following parameters:
+   - **Stack name** — Enter a name (e.g., `nova-sonic-infra-dev`)
+   - **Environment** — Select `dev`, `staging`, or `prod` (default: `dev`)
+   - **UserEmail** — Enter a valid email address to receive the initial login credentials
+5. Choose **Next**, acknowledge the IAM capabilities checkbox, and choose **Submit**.
+6. Wait for the stack status to reach `CREATE_COMPLETE` (approximately 5–10 minutes).
 
-- AWS Lambda function:
-  - `DriveThruMenuLambda` – Populates menu data and generates AI images
+### Step 3: Record infrastructure outputs
 
-- CloudFormation Custom Resource:
-  - `DriveThruMenuPopulation` – Triggers `DriveThruMenuLambda`
+1. In the CloudFormation console, select the infrastructure stack.
+2. Choose the **Outputs** tab.
+3. Copy and save the following values — you need them to configure the frontend application:
+   - `UserPoolId`
+   - `UserPoolClientId`
+   - `IdentityPoolId`
+   - `menuApiUrl`
+   - `cartApiUrl`
+   - `orderApiUrl`
+   - `loyaltyApiUrl`
+   - `chatApiUrl`
 
-Once both CloudFormation templates are successfully deployed, you'll have a fully functional restaurant drive-thru ordering system with AI-generated menu images, complete authentication, and ready-to-use API endpoints for your Amplify frontend deployment.
+### Step 4: Deploy the application stack
 
-## Deploy the Amplify application
+1. In the CloudFormation console, choose **Create stack** > **With new resources (standard)**.
+2. Upload `nova-sonic-application-drivethru.yaml`.
+3. Provide the following parameter:
+   - **InfrastructureStackName** — Enter the exact stack name from Step 2 (e.g., `nova-sonic-infra-dev`)
+4. Choose **Next**, acknowledge the IAM capabilities checkbox, and choose **Submit**.
+5. Wait for the stack status to reach `CREATE_COMPLETE` (approximately 10–15 minutes). This stack generates AI images for all menu items using Amazon Bedrock.
 
-You need to manually deploy the Amplify application using the frontend code found on GitHub. Complete the following steps:
+### Step 5: Deploy the Amplify frontend
 
-1. Download the frontend code `NovaSonic-FrontEnd.zip` from [GitHub](https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic).
-2. Use the .zip file to manually [deploy](https://docs.aws.amazon.com/amplify/latest/userguide/manual-deploys.html) the application in Amplify.
-3. Return to the Amplify page and use the domain it automatically generated to access the application.
+1. Download the frontend code `NovaSonic-FrontEnd.zip` from the [GitHub repository](https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic).
+2. Open the [AWS Amplify console](https://console.aws.amazon.com/amplify/).
+3. Choose **Create new app** > **Deploy without Git provider**.
+4. Upload the `NovaSonic-FrontEnd.zip` file and choose **Save and deploy**.
+5. Wait for the deployment to complete and note the generated application URL.
 
-## User authentication
+## Deployment Validation
+
+1. Open the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/) and verify both stacks show status `CREATE_COMPLETE`:
+   - Infrastructure stack (e.g., `nova-sonic-infra-dev`)
+   - Application stack (e.g., `nova-sonic-app-dev`)
+
+2. Verify DynamoDB tables are populated:
 
-The solution uses Amazon Cognito user pools and identity pools to implement secure, role-based access control for restaurant's digital menu board. User pools handle authentication and group management through the `AppUserGroup`, and identity pools provide temporary AWS credentials mapped to specific IAM roles including `AuthenticatedRole`. The system makes sure that only verified digital menu board users can access the application and interact with the menu APIs, cart management, order processing, and loyalty services, while also providing secure access to Amazon Bedrock. This combines robust security with an intuitive ordering experience for both customers and restaurant operations.
+   ```bash
+   aws dynamodb scan --table-name <MenuTableName> --select COUNT
+   ```
 
-## Serverless data management
+   Expected output: `"Count": 22` (22 menu items including burgers, wings, fries, drinks, sauces, desserts, and combos).
 
-The solution implements a serverless API architecture using Amazon API Gateway to create a single REST API `(app-api)` that facilitates communication between the frontend interface and backend services. The API includes five resource endpoints `(/menu, /loyalty, /cart, /chat,/order)` with Cognito-based authentication and direct DynamoDB integration for data operations. The backend utilizes five DynamoDB tables: `MenuTable` for menu items and pricing, `LoyaltyTable` for customer profiles and loyalty points, `CartTable` for active shopping sessions, `ChatTable` for capturing chat history and `OrderTable` for order tracking and history. This architecture provides fast, consistent performance at scale with Global Secondary Indexes enabling efficient queries by customer ID and order status for optimal drive-thru operations.
+3. Verify AI-generated images exist in S3:
 
-## Menu and image generation and distribution
+   ```bash
+   aws s3 ls s3://<MenuImagesBucketName>/ --recursive | wc -l
+   ```
 
-The solution uses Amazon S3 and CloudFront for secure, global content delivery of menu item images. The CloudFormation template creates a `MenuImagesBucket` with restricted access through a CloudFront Origin Access Identity, making sure images are served securely using the CloudFront distribution for fast loading times worldwide. AWS Lambda powers the AI-driven content generation through the `DriveThruMenuLambda` function, which automatically populates sample menu data and generates high-quality menu item images using Amazon Nova Canvas. This serverless function executes during stack deployment to create professional food photography for the menu items, from classic burgers to specialty wings, facilitating consistent visual presentation across the entire menu. The Lambda function integrates with DynamoDB to store generated image URLs and uses S3 for persistent storage, creating a complete automated workflow that scales based on demand while optimizing costs through pay-per-use pricing.
+   Expected output: approximately 22 image files across category folders.
 
-## Voice AI processing
+4. Open the Amplify application URL in a browser and verify the sign-in page loads.
 
-The solution uses Amazon Nova Sonic as the core voice AI engine. The digital menu board establishes direct integration with Amazon Nova Sonic through secure WebSocket connections, for immediate processing of customer speech input and conversion to structured ordering data. The CloudFormation template configures IAM permissions for the `AuthenticatedRole` to access the amazon.nova-sonic-v1:0 foundation model, allowing authenticated users to interact with the voice AI service. Nova Sonic handles complex natural language understanding and intent recognition, processing customer requests like menu inquiries, order modifications, and item customizations while maintaining conversation context throughout the ordering process. This direct integration minimizes latency concerns and provides customers with a natural, conversational ordering experience that rivals human interaction while maintaining reliable service across drive-thru locations.
+## Running the Guidance
 
-## Hosting the digital menu board
+### Step 1: Configure the application
 
-AWS Amplify hosts and delivers the digital menu board interface as a scalable frontend application. The interface displays AI-generated menu images through CloudFront, with real-time pricing from DynamoDB, optimized for drive-thru environments. The React-based application automatically scales during peak hours, using the global content delivery network available in CloudFront for fast loading times. It integrates with Amazon Cognito for authentication, establishes WebSocket connections to Amazon Nova Sonic for voice processing, and uses API Gateway endpoints for menu and order management. This serverless solution maintains high availability while providing real-time visual updates as customers interact through voice commands.
+1. Open the Amplify application URL in your browser.
+2. Select **Choose Sample**, then pick **AI Drive-Thru Experience** from the sample list, and select **Load Sample**. This imports the system prompt, tools, and tool configurations.
+3. Enter the Amazon Cognito configuration values from the CloudFormation outputs:
+   - `UserPoolId`
+   - `UserPoolClientId`
+   - `IdentityPoolId`
+4. Enter the API endpoint URLs under **Tools global parameters**:
+   - `menuAPIURL`
+   - `cartAPIURL`
+   - `orderAPIURL`
+   - `loyaltyAPIURL`
+   - `chatAPIURL`
+5. (Optional) Enable **Auto-Initiate Conversation** to have Nova 2 Sonic greet the customer automatically.
+6. Select **Save and Exit**.
 
-## WebSocket connection flow
+### Step 2: Sign in
 
-The following sequence diagram illustrates the WebSocket connection setup enabling direct browser-to-Nova Sonic communication. This architecture leverages the AWS SDK [update](https://github.com/aws/aws-sdk-js-v3/releases/tag/v3.842.0) (client-bedrock-runtime v3.842.0), which introduces WebSocketHandler support in browsers, avoiding the need for a server.
+1. On the sign-in screen, enter username `appuser` and the temporary password sent to the email address you provided during CloudFormation deployment.
+2. Complete the account verification using the code sent to your email.
+3. Create a new permanent password when prompted.
 
-<img width="1257" height="953" alt="3 WebSocketConnectionSetup Configuration" src="https://github.com/user-attachments/assets/1ba35d0a-fcf1-4767-bba9-12c51d6801f5" />
+### Step 3: Start a voice interaction
 
-This advancement allows frontend applications to establish direct WebSocket connections to Nova Sonic, reducing latency and complexity while enabling real-time conversational AI in the browser. The initialization process includes credential validation, Bedrock client establishment, AI assistant configuration, and [audio input](https://docs.aws.amazon.com/nova/latest/userguide/input-events.html) setup (16kHz PCM). This direct client-to-service communication represents a shift from traditional architectures, offering more efficient and scalable conversational AI applications.
+1. Select the microphone icon on the digital menu board.
+2. Speak a request, for example: *"Can you show me what burgers you have?"*
+3. Observe the following:
+   - Nova 2 Sonic responds with a natural audio description of available burgers.
+   - The digital menu board highlights the burger category and displays AI-generated images with pricing.
+4. Continue the conversation to add items to your cart, customize orders, and complete the transaction.
 
-## Voice interaction and dynamic menu
+**Sample interaction flow:**
+- *"I'd like a Cheese Burger with extra bacon"* — adds a customized item to the cart
+- *"Add a Cola and Regular Fries"* — adds additional items
+- *"What combos do you have?"* — displays combo meal options
+- *"Place my order"* — finalizes the order and provides a summary
 
-The following sequence diagram illustrates the flow of a customer's burger query, demonstrating how natural language requests are processed to deliver synchronized audio responses and visual updates.
+## Next Steps
 
-<img width="1769" height="1025" alt="4 DynamicMenuContext Real-TimeUpdates" src="https://github.com/user-attachments/assets/bc107fe5-7635-43e0-b4ae-266e72497938" />
+Consider the following enhancements to customize this Guidance for your environment:
 
-This diagram shows how a query `("Can you show me what burgers you have?")` is handled. Nova Sonic calls `getMenuItems` `({category: "burgers"})` to retrieve menu data, while Frontend App components fetch and structure burger items and prices. Nova Sonic generates a contextual response and triggers `showCategory` `({category: "burgers"})` to highlight the burger section in the UI. This process facilitates real-time synchronization between audio responses and visual menu updates, creating a seamless customer experience throughout the conversation.
+- **Custom menu data** — Replace the sample menu items in the Lambda function with your restaurant's actual menu, pricing, and customization options.
+- **Multi-language support** — Configure Nova 2 Sonic with additional language prompts to serve customers in multiple languages.
+- **Payment integration** — Integrate a payment gateway (e.g., Stripe, Square) with the order processing flow through additional API Gateway endpoints.
+- **Analytics dashboard** — Use **Amazon QuickSight** with DynamoDB data exports to visualize order trends, peak hours, and popular items.
+- **Loyalty program expansion** — Extend the loyalty table schema and Nova 2 Sonic tool functions to support tiered rewards, promotions, and personalized recommendations.
+- **Multi-location deployment** — Parameterize the CloudFormation templates for multi-Region or multi-account deployment to support restaurant chains.
 
-## Drive-thru solution walkthrough
+## Cleanup
 
-After deploying your application in AWS Amplify, open the generated URL in your browser. You'll see two setup options: `Choose Sample` and `Manual Setup`. Select `Choose Sample` then pick `AI Drive-Thru Experience` from the sample list, and then select `Load Sample`. This will automatically import the system prompt, tools, and tool configurations for the drive-thru solution. We will configure these settings in the following steps.
+Follow these steps to remove all resources created by this Guidance:
 
-![5 LoadSampleConfiguration-compressed](https://github.com/user-attachments/assets/08227d31-9263-4993-8be8-f32496744b4b)
+1. **Delete the application CloudFormation stack:**
+   - Open the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/).
+   - Select the application stack (deployed from `nova-sonic-application-drivethru.yaml`).
+   - Choose **Delete** and confirm.
+   - Wait for the stack deletion to complete.
 
-After selecting `Load Sample`, you'll be prompted to configure the connection settings. You'll need to use the Amazon Cognito and API Gateway information from your CloudFormation stack outputs. These values are required because they connect your digital menu board to backend services.
+2. **Delete the infrastructure CloudFormation stack:**
+   - Select the infrastructure stack (deployed from `nova-sonic-infrastructure-drivethru.yaml`).
+   - Choose **Delete** and confirm.
+   - Wait for the stack deletion to complete.
 
-Enter the configuration values you copied from the CloudFormation outputs `(nova-sonic-infrastructure-drivethru.yaml)`. These are organized into two sections, as demonstrated in the following videos. After you enter the configuration details in each section, select `Save` button at the top of the screen.
+   > **Note:** The S3 bucket cleanup Lambda function automatically empties the `MenuImagesBucket` and `AccessLogsBucket` during stack deletion. If deletion fails due to non-empty buckets, manually empty them first:
+   >
+   > ```bash
+   > aws s3 rm s3://<MenuImagesBucketName> --recursive
+   > aws s3 rm s3://<AccessLogsBucketName> --recursive
+   > ```
 
-Amazon Cognito configuration:
-- `UserPoolId`
-- `UserPoolClientId`
-- `IdentityPoolId`
+3. **Delete the Amplify application:**
+   - Open the [AWS Amplify console](https://console.aws.amazon.com/amplify/).
+   - Select the deployed application.
+   - Choose **Actions** > **Delete app** and confirm.
 
-![6 AmazonCongitoConfiguration-compressed](https://github.com/user-attachments/assets/f28ce41a-db6e-4bd8-9c35-7f86a01204b0)
+4. **Verify cleanup:**
+   - Confirm no remaining resources in the CloudFormation, DynamoDB, S3, and Amplify consoles.
+   - Check for any orphaned CloudWatch log groups under `/aws/lambda/` and delete them manually if present.
 
-Agent configuration:
-- Auto-Initiate Conversation - Nova Sonic is initially set to wait for you to start the conversation. However, you can enable automatic conversation initiation by checking the 'Enable auto-initiate' box. There is a pre-recorded 'Hello' that you can use that's stored locally.
+## FAQ, Known Issues, Additional Considerations, and Limitations
 
-![7 AutoInitiate-compressed](https://github.com/user-attachments/assets/940ce553-c4d8-4c40-b3c9-c4a56941791a)
+**Known issues:**
 
-- Tools global parameters:
-  - `menuAPIURL`
-  - `cartAPIURL`
-  - `orderAPIUR`
-  - `loyaltyAPIURL`
-  - `chatAPIURL`
+- The AI image generation step during the application stack deployment can take 10–15 minutes due to sequential image generation for all menu items. If the Lambda function times out, re-deploy the application stack.
+- WebSocket connections to Nova 2 Sonic may disconnect after extended idle periods. The frontend automatically reconnects when the user initiates a new voice interaction.
 
-![8 AgentConfiguration-compressed](https://github.com/user-attachments/assets/ee0c2930-9184-4e8e-9873-6cd2fd357e57)
+**Additional considerations:**
 
-After completing the configuration, click the `Save and Exit` button located at the top of the page. This action will redirect you to a sign-in screen. To access the system, use the username `appuser` and the password automatically generated and emailed to you to the email that was provided during the CloudFormation deployment.
+- This Guidance creates a CloudFront distribution with a default domain name. For production use, configure a custom domain with an ACM certificate.
+- The API Gateway endpoints use Cognito authorization. Unauthenticated access is not permitted.
+- The S3 buckets have Object Lock enabled in GOVERNANCE mode with a 30-day retention period. Factor this into your data lifecycle management.
+- Amazon Bedrock usage incurs per-request charges for both Nova 2 Sonic voice sessions and image generation. Monitor usage through AWS Cost Explorer.
+- The sample menu data and customer records are synthetic and intended for demonstration purposes only.
 
-After entering the temporary password, you'll be asked to verify your account through a temporary code sent to your email.
+For any feedback, questions, or suggestions, use the [Issues tab](https://github.com/aws-samples/sample-voice-ai-powered-drive-thru-with-amazon-nova-sonic/issues) in the GitHub repository.
 
-Upon your initial login attempt, you'll be required to create a new password to replace the temporary one, as demonstrated in the following video.
+## Notices
 
-![9 SignInDigitalMenuBoard-compressed](https://github.com/user-attachments/assets/e084593f-3af1-4166-a947-7e4aefd9d3ca)
-
-Begin your drive-thru experience by clicking the microphone icon. The AI assistant welcomes you and guides you through placing your order while dynamically updating the digital menu board to highlight relevant items. The system intelligently suggests complementary items and adapts its communication style to enhance your ordering experience.
-
-https://github.com/user-attachments/assets/1a7aa7a0-88e6-4849-9dea-6fcce6c4141c
-
-## Clean up
-
-If you decide to discontinue using the solution, you can follow these steps to remove it, its associated resources deployed using AWS CloudFormation, and the Amplify deployment:
-
-1. Delete the CloudFormation stack:
-   - On the AWS CloudFormation console, choose Stacks in the navigation pane.
-   - Locate the stack you created during the deployment process of `nova-sonic-application-drivethru.yaml` (you assigned a name to it).
-   - Select the stack and choose Delete.
-   - Repeat this for `nova-sonic-infrastructure-drivethru.yaml`
-
-2. Delete the Amplify application and its resources. For instructions, refer to [Clean Up Resources](https://aws.amazon.com/getting-started/hands-on/build-web-app-s3-lambda-api-gateway-dynamodb/module-six/).
-
-## Conclusion
-
-The voice AI-powered drive-thru ordering system using Amazon Nova Sonic provides restaurants with a practical solution to common operational challenges including staffing constraints, order accuracy issues, and peak-hour bottlenecks. The serverless architecture built on AWS services—Amazon Cognito for authentication, API Gateway for data communication, DynamoDB for storage, and AWS Amplify for hosting, creates a scalable system that handles varying demand while maintaining consistent performance. The system supports essential restaurant operations including menu management, cart functionality, loyalty programs, and order processing through direct API Gateway and DynamoDB integration. For restaurants looking to modernize their drive-thru operations, this solution offers measurable benefits including reduced wait times, improved order accuracy, and operational efficiency gains. The pay-per-use pricing model and automated scaling help control costs while supporting business growth. As customer expectations shift toward more efficient service experiences, implementing voice AI technology provides restaurants with a competitive advantage and positions them well for future technological developments in the food service industry.
-
-## Additional resources
-
-To learn more about Amazon Nova Sonic and additional solutions, refer to the following resources:
-
-- [Introducing Amazon Nova Sonic: Human-like voice conversations for generative AI applications](https://aws.amazon.com/blogs/aws/introducing-amazon-nova-sonic-human-like-voice-conversations-for-generative-ai-applications/)
-- Frontend application source code used in this blog is available on [GitHub](https://github.com/aws-samples/sample-voice-ai-powered-contextual-menu-board-with-amazon-nova-sonic)
-- [Voice AI-Powered Hotel In-Room Service with Amazon Nova Sonic](https://github.com/aws-samples/sample-voice-ai-powered-in-room-service-with-amazon-nova-sonic/tree/main)
+*Customers are responsible for making their own independent assessment of the information in this Guidance. This Guidance: (a) is for informational purposes only, (b) represents AWS current product offerings and practices, which are subject to change without notice, and (c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided "as is" without warranties, representations, or conditions of any kind, whether express or implied. AWS responsibilities and liabilities to its customers are controlled by AWS agreements, and this Guidance is not part of, nor does it modify, any agreement between AWS and its customers.*
 
 ## Authors
 
-- Ravi Kumar, Senior TAM
-- Sergio Barraza, Senior TAM
 - Salman Ahmed, Senior TAM
+- Sergio Barraza, Senior TAM
+- Ravi Kumar, Senior TAM
 - Ankush Goyal, ESL TAM
-
----
