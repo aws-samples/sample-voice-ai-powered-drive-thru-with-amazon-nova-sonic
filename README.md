@@ -5,20 +5,21 @@
 ## Table of Contents
 
 1. [Overview](#overview)
+    - [User request flow](#user-request-flow)
     - [Cost](#cost)
-2. [Prerequisites](#prerequisites)
+3. [Prerequisites](#prerequisites)
     - [Operating System](#operating-system)
     - [AWS Account Requirements](#aws-account-requirements)
     - [Supported Regions](#supported-regions)
-3. [Automated Deployment](#automated-deployment)
-4. [Manual Deployment](#manual-deployment)
-5. [Deployment Validation](#deployment-validation)
-6. [Running the Guidance](#running-the-guidance)
-7. [Next Steps](#next-steps)
-8. [Cleanup](#cleanup)
-9. [FAQ, Known Issues, Additional Considerations, and Limitations](#faq-known-issues-additional-considerations-and-limitations)
-10. [Notices](#notices)
-11. [Authors](#authors)
+4. [Automated Deployment](#automated-deployment)
+5. [Manual Deployment](#manual-deployment)
+6. [Deployment Validation](#deployment-validation)
+7. [Running the Guidance](#running-the-guidance)
+8. [Next Steps](#next-steps)
+9. [Cleanup](#cleanup)
+10. [FAQ, Known Issues, Additional Considerations, and Limitations](#faq-known-issues-additional-considerations-and-limitations)
+11. [Notices](#notices)
+12. [Authors](#authors)
 
 ## Overview
 
@@ -42,6 +43,8 @@ The architecture integrates the following AWS services:
 The following architecture diagram illustrates how these services interconnect to enable natural conversations between customers and the digital menu board, orchestrating the entire customer journey from drive-thru entry to order completion.
 
 ![Architecture Diagram](assets/images/architecture-diagram.png)
+
+### User request flow
 
 1. The customer approaches the drive-thru and the digital menu board loads via **AWS Amplify**, authenticating through **Amazon Cognito**.
 2. **Amazon Cognito** issues temporary AWS credentials mapped to an **IAM** role, granting access to **Amazon Bedrock** and **Amazon API Gateway** endpoints.
