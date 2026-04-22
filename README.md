@@ -5,55 +5,54 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-    - [User request flow](#user-request-flow)
     - [Cost](#cost)
-3. [Prerequisites](#prerequisites)
+2. [Prerequisites](#prerequisites)
     - [Operating System](#operating-system)
     - [AWS Account Requirements](#aws-account-requirements)
     - [Supported Regions](#supported-regions)
-4. [Automated Deployment](#automated-deployment)
-5. [Manual Deployment](#manual-deployment)
-6. [Deployment Validation](#deployment-validation)
-7. [Running the Guidance](#running-the-guidance)
-8. [Next Steps](#next-steps)
-9. [Cleanup](#cleanup)
-10. [FAQ, Known Issues, Additional Considerations, and Limitations](#faq-known-issues-additional-considerations-and-limitations)
-11. [Notices](#notices)
-12. [Authors](#authors)
+3. [Automated Deployment](#automated-deployment)
+4. [Manual Deployment](#manual-deployment)
+5. [Deployment Validation](#deployment-validation)
+6. [Running the Guidance](#running-the-guidance)
+7. [Next Steps](#next-steps)
+8. [Cleanup](#cleanup)
+9. [FAQ, Known Issues, Additional Considerations, and Limitations](#faq-known-issues-additional-considerations-and-limitations)
+10. [Notices](#notices)
+11. [Authors](#authors)
 
 ## Overview
 
-This Guidance demonstrates how to build an intelligent drive-thru ordering system for quick-service restaurants (QSRs) using **Amazon Nova 2 Sonic** and AWS serverless services. The system combines real-time voice AI with an interactive digital menu board to deliver natural, human-like ordering experiences that address common operational challenges including staffing constraints, order accuracy issues, and peak-hour bottlenecks.
+This Guidance demonstrates how to build an intelligent drive-thru ordering system for quick-service restaurants (QSRs) using **Amazon Nova 2 Sonic** and AWS serverless services. The system combines near real-time voice AI with an interactive digital menu board to deliver natural, human-like ordering experiences that address common operational challenges including staffing constraints, order accuracy issues, and peak-hour bottlenecks.
 
-**Amazon Nova 2 Sonic** is a foundation model (FM) within the **Amazon Nova** family, available through **Amazon Bedrock**. It processes streaming speech with robustness to background noise, adapts responses to user tone and sentiment, and supports bidirectional streaming with low perceived latency. The system establishes direct WebSocket connections from the browser to Nova 2 Sonic using the AWS SDK (`client-bedrock-runtime` v3.842.0), eliminating the need for a backend relay server.
+**Amazon Nova 2 Sonic** is a foundation model (FM) within the **Amazon Nova** family, available through **Amazon Bedrock**, a fully managed service with built-in security, privacy, and responsible AI. It processes streaming speech with robustness to background noise, adapts responses to user tone and sentiment, and supports bidirectional streaming with low perceived latency. The system establishes a SigV4-signed WebSocket session from the browser to Amazon Bedrock using the AWS SDK BidirectionalStreaming API (`client-bedrock-runtime` v3.842.0), eliminating the need for a backend relay server.
 
 The architecture integrates the following AWS services:
 
-- **Amazon Cognito** — User authentication with role-based access control
+- **Amazon Cognito** — Manages temporary AWS credentials with scoped IAM permissions and secures access to backend services through token-based authorization
 - **AWS Amplify** — Hosts the React-based digital menu board frontend
 - **Amazon API Gateway** — REST API with Cognito authorization and direct **Amazon DynamoDB** integration
 - **Amazon DynamoDB** — Stores menu items, loyalty data, cart sessions, orders, and chat history across five tables
-- **AWS Lambda** — Populates menu data and generates AI images using **Stability AI Stable Image Core** model via Amazon Bedrock
+- **AWS Lambda** — Populates menu data and generates AI images by invoking **Stability AI Stable Image Core** model through Amazon Bedrock
 - **Amazon Simple Storage Service (Amazon S3)** — Stores AI-generated menu item images
 - **Amazon CloudFront** — Global content delivery for menu images with **AWS WAF** protection
+- **AWS WAF** — Web application firewall that filters malicious traffic and blocks unauthorized access to CloudFront
 - **AWS Key Management Service (AWS KMS)** — Encrypts DynamoDB tables and Lambda environment variables
-- **Amazon Simple Queue Service (Amazon SQS)** — Dead letter queue for Lambda error handling
+- **Amazon Simple Queue Service (Amazon SQS)** — Dead letter queues that capture failed Lambda invocations for retry and alerting
+- **Amazon CloudWatch** — Centralized monitoring and logging
 - **AWS Identity and Access Management (IAM)** — Least-privilege roles for all service interactions
 
 The following architecture diagram illustrates how these services interconnect to enable natural conversations between customers and the digital menu board, orchestrating the entire customer journey from drive-thru entry to order completion.
 
 ![Architecture Diagram](assets/images/architecture-diagram.png)
 
-### User request flow
-
-1. The customer approaches the drive-thru and the digital menu board loads via **AWS Amplify**, authenticating through **Amazon Cognito**.
-2. **Amazon Cognito** issues temporary AWS credentials mapped to an **IAM** role, granting access to **Amazon Bedrock** and **Amazon API Gateway** endpoints.
-3. The frontend establishes a direct WebSocket connection to **Amazon Nova 2 Sonic** through **Amazon Bedrock** for real-time speech-to-speech processing.
-4. Nova 2 Sonic processes the customer's voice input, recognizes intent, and calls tool functions (e.g., `getMenuItems`, `showCategory`) to retrieve menu data.
-5. **Amazon API Gateway** routes tool function requests to **Amazon DynamoDB** tables (Menu, Cart, Order, Loyalty, Chat) using direct service integration.
-6. **Amazon CloudFront** delivers AI-generated menu images from **Amazon S3**, protected by **AWS WAF** rules.
-7. Nova 2 Sonic generates a contextual audio response and triggers UI updates on the digital menu board to highlight relevant items.
-8. The ordering flow continues through cart management, order placement, and loyalty point tracking until the customer completes the transaction.
+1. You access the digital menu board hosted on **AWS Amplify**, which loads the React-based ordering interface.
+2. **Amazon Cognito** manages temporary AWS credentials with scoped IAM permissions and secures access to backend services through token-based authorization.
+3. The digital menu board uses the AWS SDK BidirectionalStreaming API to establish a SigV4-signed WebSocket session with **Amazon Bedrock**. The app passes tool definitions and a system prompt to **Amazon Nova 2 Sonic**, enabling the model to orchestrate tool calls and process streaming audio.
+4. **Amazon Nova 2 Sonic** processes your streaming audio and invokes tools defined at the application level. The app's tool router captures model requests with parameters to manipulate the UI and trigger API calls.
+5. You initiate voice input via a button or sensor trigger. **Amazon API Gateway** routes tool requests to **Amazon DynamoDB** tables for menu, cart, order, loyalty, and chat data.
+6. **Amazon CloudFront** delivers AI-generated menu images stored in **Amazon S3**, protected by **AWS WAF**, a web application firewall that filters malicious traffic and blocks unauthorized access.
+7. **AWS Lambda** invokes Stability AI's Stable Image Core model through **Amazon Bedrock** to generate menu images, stores the image binary in **Amazon S3**, and updates the image reference in **Amazon DynamoDB**. This happens once during the Guidance deployment.
+8. **AWS KMS** encrypts DynamoDB tables. **Amazon SQS** dead letter queues capture failed **AWS Lambda** invocations for retry and alerting. **Amazon CloudWatch** provides centralized monitoring and logging.
 
 ### Cost
 
